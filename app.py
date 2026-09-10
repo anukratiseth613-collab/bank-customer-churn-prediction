@@ -2,18 +2,10 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-
-
-# --------------------------------------------------
-# LOAD MODEL FILES
-# --------------------------------------------------
-
-model = joblib.load("bank_churn_model.pkl")
-features = joblib.load("bank_churn_features.pkl")
-
+from pathlib import Path
 
 # --------------------------------------------------
-# PAGE CONFIGURATION
+# PAGE SETTINGS
 # --------------------------------------------------
 
 st.set_page_config(
@@ -22,21 +14,46 @@ st.set_page_config(
     layout="wide"
 )
 
+# --------------------------------------------------
+# FILE PATHS
+# --------------------------------------------------
+
+BASE_DIR = Path(__file__).resolve().parent
+
+MODEL_PATH = BASE_DIR / "bank_churn_model.pkl"
+FEATURES_PATH = BASE_DIR / "bank_churn_features.pkl"
+
+# --------------------------------------------------
+# LOAD MODEL
+# --------------------------------------------------
+
+try:
+    model = joblib.load(MODEL_PATH)
+    features = joblib.load(FEATURES_PATH)
+
+except Exception as e:
+    st.error("Unable to load the prediction model.")
+    st.write("Please make sure the model files are uploaded correctly.")
+    st.code(str(e))
+    st.stop()
 
 # --------------------------------------------------
 # TITLE
 # --------------------------------------------------
 
 st.title("🏦 Bank Customer Churn Prediction")
-st.write("Predict customer churn probability and identify retention risk.")
 
+st.write(
+    "Predict customer churn probability and identify customer retention risk."
+)
+
+st.divider()
 
 # --------------------------------------------------
 # SIDEBAR
 # --------------------------------------------------
 
-st.sidebar.header("Customer Information")
-
+st.sidebar.header("👤 Customer Information")
 
 credit_score = st.sidebar.number_input(
     "Credit Score",
@@ -45,18 +62,15 @@ credit_score = st.sidebar.number_input(
     value=650
 )
 
-
 geography = st.sidebar.selectbox(
     "Geography",
     ["France", "Germany", "Spain"]
 )
 
-
 gender = st.sidebar.selectbox(
     "Gender",
     ["Female", "Male"]
 )
-
 
 age = st.sidebar.slider(
     "Age",
@@ -65,7 +79,6 @@ age = st.sidebar.slider(
     value=40
 )
 
-
 tenure = st.sidebar.slider(
     "Tenure (Years)",
     min_value=0,
@@ -73,13 +86,11 @@ tenure = st.sidebar.slider(
     value=5
 )
 
-
 balance = st.sidebar.number_input(
     "Account Balance",
     min_value=0.0,
     value=75000.0
 )
-
 
 products = st.sidebar.slider(
     "Number of Products",
@@ -88,25 +99,21 @@ products = st.sidebar.slider(
     value=2
 )
 
-
 credit_card = st.sidebar.selectbox(
     "Has Credit Card?",
     ["Yes", "No"]
 )
-
 
 active_member = st.sidebar.selectbox(
     "Is Active Member?",
     ["Yes", "No"]
 )
 
-
 salary = st.sidebar.number_input(
     "Estimated Salary",
     min_value=0.0,
     value=100000.0
 )
-
 
 # --------------------------------------------------
 # CONVERT INPUTS
@@ -115,16 +122,17 @@ salary = st.sidebar.number_input(
 has_credit_card = 1 if credit_card == "Yes" else 0
 is_active = 1 if active_member == "Yes" else 0
 
-
 # --------------------------------------------------
 # FEATURE ENGINEERING
 # --------------------------------------------------
 
 balance_salary = balance / (salary + 1)
-product_density = products / (tenure + 1)
-engagement_product = is_active * products
-age_tenure = age * tenure
 
+product_density = products / (tenure + 1)
+
+engagement_product = is_active * products
+
+age_tenure = age * tenure
 
 # --------------------------------------------------
 # CREATE CUSTOMER DATAFRAME
@@ -147,7 +155,6 @@ customer = pd.DataFrame({
     "Age_Tenure": [age_tenure]
 })
 
-
 # --------------------------------------------------
 # ONE-HOT ENCODING
 # --------------------------------------------------
@@ -156,7 +163,6 @@ customer = pd.get_dummies(
     customer,
     columns=["Geography", "Gender"]
 )
-
 
 # --------------------------------------------------
 # MATCH TRAINING FEATURES
@@ -167,136 +173,100 @@ customer = customer.reindex(
     fill_value=0
 )
 
-
 # --------------------------------------------------
 # PREDICTION
 # --------------------------------------------------
 
-if st.button("Predict Churn Risk"):
+st.subheader("🔍 Churn Prediction")
 
-    probability = model.predict_proba(customer)[0, 1]
+if st.button("Predict Churn Risk", type="primary"):
 
-    percentage = probability * 100
+    try:
 
+        probability = model.predict_proba(customer)[0, 1]
 
-    # --------------------------------------------------
-    # RESULT
-    # --------------------------------------------------
+        percentage = probability * 100
 
-    st.subheader("Churn Risk Result")
-
-
-    col1, col2 = st.columns(2)
-
-
-    with col1:
-
-        st.metric(
-            "Churn Probability",
-            f"{percentage:.2f}%"
-        )
-
-
-    with col2:
-
+        # Risk category
         if probability < 0.30:
-
             risk = "Low Risk"
-
         elif probability < 0.60:
-
             risk = "Medium Risk"
+        else:
+            risk = "High Risk"
+
+        # --------------------------------------------------
+        # RESULTS
+        # --------------------------------------------------
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.metric(
+                "Churn Probability",
+                f"{percentage:.2f}%"
+            )
+
+        with col2:
+            st.metric(
+                "Risk Category",
+                risk
+            )
+
+        st.progress(float(probability))
+
+        # --------------------------------------------------
+        # RISK MESSAGE
+        # --------------------------------------------------
+
+        if risk == "High Risk":
+
+            st.error(
+                "⚠️ High churn risk. "
+                "Consider proactive customer retention action."
+            )
+
+        elif risk == "Medium Risk":
+
+            st.warning(
+                "⚠️ Medium churn risk. "
+                "Customer engagement should be monitored."
+            )
 
         else:
 
-            risk = "High Risk"
+            st.success(
+                "✅ Low churn risk. "
+                "Customer appears relatively stable."
+            )
 
+        # --------------------------------------------------
+        # CUSTOMER SUMMARY
+        # --------------------------------------------------
 
-        st.metric(
-            "Risk Category",
-            risk
-        )
+        st.divider()
 
+        st.subheader("📋 Customer Summary")
 
-    # --------------------------------------------------
-    # PROGRESS BAR
-    # --------------------------------------------------
+        summary_col1, summary_col2, summary_col3 = st.columns(3)
 
-    st.progress(float(probability))
+        with summary_col1:
+            st.write("**Age:**", age)
+            st.write("**Gender:**", gender)
+            st.write("**Geography:**", geography)
 
+        with summary_col2:
+            st.write("**Credit Score:**", credit_score)
+            st.write("**Tenure:**", f"{tenure} years")
+            st.write("**Products:**", products)
 
-    # --------------------------------------------------
-    # RISK MESSAGE
-    # --------------------------------------------------
+        with summary_col3:
+            st.write("**Balance:**", f"₹{balance:,.2f}")
+            st.write("**Estimated Salary:**", f"₹{salary:,.2f}")
+            st.write("**Active Member:**", active_member)
 
-    if risk == "High Risk":
+    except Exception as e:
 
-        st.error(
-            "⚠️ High churn risk. Consider proactive retention action."
-        )
+        st.error("Prediction could not be completed.")
 
-    elif risk == "Medium Risk":
-
-        st.warning(
-            "⚠️ Medium churn risk. Customer engagement should be monitored."
-        )
-
-    else:
-
-        st.success(
-            "✅ Low churn risk. Customer appears relatively stable."
-        )
-
-
-    # --------------------------------------------------
-    # CHURN PROBABILITY GRAPH
-    # --------------------------------------------------
-
-    st.subheader("Churn Probability Distribution")
-
-    chart_data = pd.DataFrame({
-        "Probability": [probability]
-    })
-
-    st.bar_chart(chart_data)
-
-
-    # --------------------------------------------------
-    # CUSTOMER SUMMARY
-    # --------------------------------------------------
-
-    st.subheader("Customer Summary")
-
-    summary = pd.DataFrame({
-        "Feature": [
-            "Credit Score",
-            "Geography",
-            "Gender",
-            "Age",
-            "Tenure",
-            "Account Balance",
-            "Number of Products",
-            "Credit Card",
-            "Active Member",
-            "Estimated Salary"
-        ],
-
-        "Value": [
-            credit_score,
-            geography,
-            gender,
-            age,
-            tenure,
-            balance,
-            products,
-            credit_card,
-            active_member,
-            salary
-        ]
-    })
-
-    st.dataframe(
-        summary,
-        use_container_width=True,
-        hide_index=True
-    )
+        st.code(str(e))
